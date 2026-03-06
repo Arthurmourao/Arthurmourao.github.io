@@ -481,15 +481,18 @@ function setHNTab(type,el) {
 
 
 // ════════════════════════════════════════
-// NEWS via RSS → allorigins proxy + XML parse
+// NEWS via RSS — multi-proxy fallback
 // ════════════════════════════════════════
 let nTab='world';
 const nStore={world:[],pt:[],tech:[],urgent:[]};
 
 const RFEEDS={
-  world:['https://feeds.bbci.co.uk/news/world/rss.xml','https://rss.nytimes.com/services/xml/rss/nyt/World.xml'],
-  pt:   ['https://feeds.publico.pt/publico/ultimas','https://observador.pt/feed/'],
-  tech: ['https://feeds.arstechnica.com/arstechnica/index','https://www.theverge.com/rss/index.xml'],
+  world:['https://feeds.bbci.co.uk/news/world/rss.xml',
+         'https://feeds.reuters.com/reuters/worldNews'],
+  pt:   ['https://observador.pt/feed/',
+         'https://rss.rtp.pt/rss'],
+  tech: ['https://feeds.arstechnica.com/arstechnica/index',
+         'https://www.theverge.com/rss/index.xml'],
 };
 const URG_KW=['breaking','urgent','alert','attack','killed','dead','dies','earthquake',
   'explosion','crash','disaster','emergency','crisis','war','missile',
@@ -499,19 +502,39 @@ function isUrg(t){ const l=t.toLowerCase(); return URG_KW.some(k=>l.includes(k))
 
 function parseRssXml(xml) {
   const doc = new DOMParser().parseFromString(xml, 'text/xml');
-  return Array.from(doc.querySelectorAll('item')).map(item => {
+  // support both RSS <item> and Atom <entry>
+  const items = doc.querySelectorAll('item').length
+    ? doc.querySelectorAll('item')
+    : doc.querySelectorAll('entry');
+  return Array.from(items).map(item => {
     const txt = s => item.querySelector(s)?.textContent?.trim() || '';
-    const link = txt('link') || txt('guid') || '#';
-    return { title: txt('title'), link, pubDate: txt('pubDate') };
+    const linkEl = item.querySelector('link');
+    // Atom uses <link href="…"/>, RSS uses <link>text</link>
+    const link = linkEl?.getAttribute('href') || linkEl?.textContent?.trim() || txt('guid') || '#';
+    const date = txt('pubDate') || txt('updated') || txt('published') || '';
+    return { title: txt('title'), link, pubDate: date };
   });
 }
 
-async function rss(url) {
-  try {
-    const proxy = `https://api.allorigins.win/get?url=${encodeURIComponent(url)}`;
-    const d = await fetch(proxy).then(r => r.json());
-    return parseRssXml(d.contents || '');
-  } catch { return []; }
+// Try multiple CORS proxies in order; return first that yields items
+async function rss(feedUrl) {
+  const proxies = [
+    () => fetch(`https://api.allorigins.win/raw?url=${encodeURIComponent(feedUrl)}`,
+                {signal: AbortSignal.timeout(8000)}).then(r => r.text()),
+    () => fetch(`https://corsproxy.io/?url=${encodeURIComponent(feedUrl)}`,
+                {signal: AbortSignal.timeout(8000)}).then(r => r.text()),
+    () => fetch(`https://api.allorigins.win/get?url=${encodeURIComponent(feedUrl)}`,
+                {signal: AbortSignal.timeout(8000)})
+              .then(r => r.json()).then(d => d.contents || ''),
+  ];
+  for (const proxy of proxies) {
+    try {
+      const text = await proxy();
+      const items = parseRssXml(text);
+      if (items.length) return items;
+    } catch {}
+  }
+  return [];
 }
 
 async function loadNews() {
@@ -522,11 +545,11 @@ async function loadNews() {
     rss(RFEEDS.tech[0]),rss(RFEEDS.tech[1]),
   ]);
   const map=(items,src)=>items.slice(0,20).map(x=>({
-    title:x.title||'',link:x.link||x.guid||'#',
+    title:x.title||'',link:x.link||'#',
     source:src,date:x.pubDate||'',urgent:isUrg(x.title||''),
   }));
-  nStore.world =[...map(w1,'BBC World'),...map(w2,'NYT World')].slice(0,30);
-  nStore.pt    =[...map(p1,'Público'), ...map(p2,'Observador')].slice(0,30);
+  nStore.world =[...map(w1,'BBC World'),...map(w2,'Reuters')].slice(0,30);
+  nStore.pt    =[...map(p1,'Observador'),...map(p2,'RTP')].slice(0,30);
   nStore.tech  =[...map(t1,'Ars Technica'),...map(t2,'The Verge')].slice(0,30);
   nStore.urgent=[...nStore.world,...nStore.pt,...nStore.tech]
     .filter(n=>n.urgent)
