@@ -1,23 +1,547 @@
+<!DOCTYPE html>
+<html lang="pt">
 <head>
-	<script type="text/javascript" src="https://cdnjs.cloudflare.com/ajax/libs/jquery/2.0.3/jquery.min.js"></script>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Dashboard · Arthur Mourão</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      --bg:     #0d1117;
+      --bg2:    #161b22;
+      --card:   #1c2128;
+      --cardh:  #22272e;
+      --bdr:    #30363d;
+      --tx:     #e6edf3;
+      --tx2:    #8b949e;
+      --tx3:    #484f58;
+      --blue:   #58a6ff;
+      --green:  #3fb950;
+      --red:    #f85149;
+    }
+
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      background: var(--bg);
+      color: var(--tx);
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+      font-size: 14px;
+      line-height: 1.5;
+      min-height: 100vh;
+    }
+
+    /* ── Header ── */
+    .hdr {
+      position: sticky; top: 0; z-index: 100;
+      background: var(--bg2);
+      border-bottom: 1px solid var(--bdr);
+      padding: 10px 24px;
+      display: flex; align-items: center; justify-content: space-between;
+    }
+    .hdr-brand { font-size: 17px; font-weight: 700; color: var(--blue); display: flex; align-items: center; gap: 8px; }
+    .hdr-clock { text-align: right; }
+    .hdr-clock .big   { font-size: 22px; font-weight: 600; }
+    .hdr-clock .small { font-size: 11px; color: var(--tx3); }
+
+    /* ── Layout ── */
+    .wrap { max-width: 1700px; margin: 0 auto; padding: 18px 20px; }
+    .grid {
+      display: grid;
+      grid-template-columns: 330px 1fr 1fr;
+      gap: 14px;
+    }
+    @media (max-width: 1100px) { .grid { grid-template-columns: 300px 1fr; } }
+    @media (max-width: 700px)  { .grid { grid-template-columns: 1fr; } }
+
+    /* ── Card ── */
+    .card {
+      background: var(--card);
+      border: 1px solid var(--bdr);
+      border-radius: 12px;
+      overflow: hidden;
+      display: flex; flex-direction: column;
+    }
+    .card-head {
+      padding: 12px 16px;
+      border-bottom: 1px solid var(--bdr);
+      display: flex; align-items: center; justify-content: space-between;
+      flex-shrink: 0;
+    }
+    .card-title {
+      font-size: 11px; font-weight: 600; text-transform: uppercase;
+      letter-spacing: .6px; color: var(--tx2);
+      display: flex; align-items: center; gap: 6px;
+    }
+    .card-title .ico { font-size: 15px; }
+    .card-acts { display: flex; align-items: center; gap: 8px; }
+
+    .badge-live {
+      font-size: 10px; padding: 2px 7px; border-radius: 20px; font-weight: 600;
+      background: rgba(63,185,80,.15); color: var(--green);
+      animation: blink 2s ease-in-out infinite;
+    }
+    @keyframes blink { 0%,100%{opacity:1} 50%{opacity:.5} }
+
+    .upd { font-size: 10px; color: var(--tx3); }
+
+    .refresh {
+      background: none; border: 1px solid var(--bdr); color: var(--tx2);
+      border-radius: 6px; padding: 3px 8px; cursor: pointer; font-size: 13px;
+      transition: .15s;
+    }
+    .refresh:hover { background: var(--cardh); color: var(--tx); }
+
+    /* ── Tabs ── */
+    .tabs { display: flex; border-bottom: 1px solid var(--bdr); flex-shrink: 0; }
+    .tab {
+      padding: 9px 15px; cursor: pointer; font-size: 12px; font-weight: 500;
+      color: var(--tx3); border-bottom: 2px solid transparent;
+      margin-bottom: -1px; transition: .15s; user-select: none;
+    }
+    .tab.on  { color: var(--blue); border-bottom-color: var(--blue); }
+    .tab:hover:not(.on) { color: var(--tx2); }
+
+    /* ── Scrollable body ── */
+    .scroll { overflow-y: auto; flex: 1; }
+    .scroll::-webkit-scrollbar { width: 4px; }
+    .scroll::-webkit-scrollbar-thumb { background: var(--bdr); border-radius: 2px; }
+
+    /* ── States ── */
+    .loading {
+      display: flex; align-items: center; justify-content: center;
+      gap: 10px; padding: 40px 16px; font-size: 13px; color: var(--tx3);
+    }
+    .err { color: var(--red); flex-direction: column; text-align: center; }
+    .spinner {
+      width: 18px; height: 18px;
+      border: 2px solid var(--bdr); border-top-color: var(--blue);
+      border-radius: 50%; animation: spin .7s linear infinite; flex-shrink: 0;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* ══ WEATHER ══ */
+    .wx-card { grid-row: span 2; }
+
+    .wx-hero {
+      text-align: center; padding: 22px 16px 16px;
+      border-bottom: 1px solid var(--bdr);
+    }
+    .wx-ico   { font-size: 68px; line-height: 1; margin-bottom: 6px; }
+    .wx-temp  { font-size: 58px; font-weight: 300; line-height: 1; }
+    .wx-temp sup { font-size: 22px; font-weight: 500; vertical-align: super; }
+    .wx-desc  { font-size: 15px; font-weight: 500; color: var(--tx2); margin-top: 5px; }
+    .wx-loc   { font-size: 12px; color: var(--tx3); margin-top: 3px; }
+    .wx-feels { font-size: 12px; color: var(--tx2); margin-top: 3px; }
+
+    .wx-grid {
+      display: grid; grid-template-columns: 1fr 1fr;
+      gap: 1px; background: var(--bdr);
+      border-bottom: 1px solid var(--bdr);
+    }
+    .wx-stat {
+      background: var(--card); padding: 13px 14px;
+      display: flex; flex-direction: column; align-items: center; gap: 3px;
+    }
+    .wx-stat-lbl { font-size: 10px; color: var(--tx3); text-transform: uppercase; letter-spacing: .5px; }
+    .wx-stat-val { font-size: 20px; font-weight: 600; }
+    .wx-stat-sub { font-size: 11px; color: var(--tx2); }
+
+    .wx-fc { padding: 14px 16px; }
+    .wx-fc-hd { font-size: 10px; text-transform: uppercase; letter-spacing: .5px; color: var(--tx3); margin-bottom: 10px; }
+    .fc-row {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 7px 8px; border-radius: 8px; transition: .15s;
+    }
+    .fc-row:hover { background: var(--cardh); }
+    .fc-day  { width: 44px; font-size: 12px; font-weight: 500; color: var(--tx2); }
+    .fc-ico  { font-size: 20px; }
+    .fc-bar  { flex: 1; margin: 0 10px; }
+    .p-track { height: 3px; background: var(--bdr); border-radius: 2px; margin-top: 3px; }
+    .p-fill  { height: 100%; background: var(--blue); border-radius: 2px; }
+    .fc-prob { font-size: 10px; color: var(--tx3); }
+    .fc-temps { display: flex; gap: 6px; font-size: 13px; }
+    .fc-hi { font-weight: 600; }
+    .fc-lo { color: var(--tx3); }
+
+    /* ══ NEWS ITEMS ══ */
+    .nl { display: flex; flex-direction: column; }
+    .ni {
+      display: block; text-decoration: none; color: inherit;
+      padding: 11px 16px; border-bottom: 1px solid var(--bdr); transition: .15s;
+    }
+    .ni:last-child { border-bottom: none; }
+    .ni:hover { background: var(--cardh); }
+    .ni-title { font-size: 13px; font-weight: 500; line-height: 1.4; margin-bottom: 4px; }
+    .ni-meta  { display: flex; align-items: center; gap: 10px; font-size: 11px; color: var(--tx3); flex-wrap: wrap; }
+    .ni-src   { color: var(--blue); font-weight: 500; }
+    .ni.urg   { border-left: 3px solid var(--red); }
+    .ni.urg .ni-title { color: #ff7b72; }
+  </style>
 </head>
 <body>
-<fieldset>
-	
-	<legend>Rxmxvxdxr de VxgXxs</legend>
 
-	<div class="form-group">
-	  <label class="col-md-4 control-label" for="Insira seu texto">Insira seu texto</label>
-	  <div class="col-md-4">                     
-	    <textarea class="form-control" id="text-formatter" name="Insira seu texto">Insira seu texto aqui</textarea>
-	  </div>
-	</div>
+<header class="hdr">
+  <div class="hdr-brand">⚡ Dashboard</div>
+  <div class="hdr-clock">
+    <div class="big"  id="clk-t">--:--</div>
+    <div class="small" id="clk-d"></div>
+  </div>
+</header>
 
-	<div class="form-group">
-	  <label class="col-md-4 control-label" for="singlebutton">Enviar</label>
-	  <div class="col-md-4">
-	    <button id="singlebutton" name="singlebutton" class="btn btn-primary" onclick='$("#text-formatter").val($("#text-formatter").val().replace(/[AEIOUaeiouÁÉÍÓÚáéíóú]/g,"x"))'>Enviar</button>
-	  </div>
-	</div>
-</fieldset>
+<div class="wrap">
+  <div class="grid">
+
+    <!-- WEATHER -->
+    <div class="card wx-card">
+      <div class="card-head">
+        <div class="card-title"><span class="ico">🌤</span> Meteorologia — Lisboa</div>
+        <div class="card-acts">
+          <span class="badge-live">● AO VIVO</span>
+          <button class="refresh" onclick="loadWx()">↻</button>
+        </div>
+      </div>
+      <div id="wx" class="scroll">
+        <div class="loading"><div class="spinner"></div> Carregando…</div>
+      </div>
+    </div>
+
+    <!-- TECH NEWS -->
+    <div class="card">
+      <div class="card-head">
+        <div class="card-title"><span class="ico">💻</span> Tech — Hacker News</div>
+        <div class="card-acts">
+          <span class="upd" id="hn-upd"></span>
+          <button class="refresh" onclick="loadHN(hnTab)">↻</button>
+        </div>
+      </div>
+      <div class="tabs">
+        <div class="tab on"  onclick="setHNTab('top',this)">Top</div>
+        <div class="tab"     onclick="setHNTab('new',this)">Novo</div>
+        <div class="tab"     onclick="setHNTab('ask',this)">Ask HN</div>
+        <div class="tab"     onclick="setHNTab('show',this)">Show HN</div>
+      </div>
+      <div id="hn" class="scroll">
+        <div class="loading"><div class="spinner"></div> Carregando…</div>
+      </div>
+    </div>
+
+    <!-- WORLD / PT NEWS -->
+    <div class="card">
+      <div class="card-head">
+        <div class="card-title"><span class="ico">🌍</span> Notícias</div>
+        <div class="card-acts">
+          <span class="upd" id="news-upd"></span>
+          <button class="refresh" onclick="loadNews()">↻</button>
+        </div>
+      </div>
+      <div class="tabs">
+        <div class="tab on"  onclick="setNTab('world',this)">🌍 Mundial</div>
+        <div class="tab"     onclick="setNTab('pt',this)">🇵🇹 Portugal</div>
+        <div class="tab"     onclick="setNTab('tech',this)">💻 Tech RSS</div>
+        <div class="tab"     onclick="setNTab('urgent',this)">🔴 Urgente</div>
+      </div>
+      <div id="news" class="scroll">
+        <div class="loading"><div class="spinner"></div> Carregando…</div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<script>
+'use strict';
+
+// ── helpers ──
+function esc(s) {
+  return String(s ?? '')
+    .replace(/&/g,'&amp;').replace(/</g,'&lt;')
+    .replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+function ago(ts) {
+  const s = Date.now()/1e3 - ts;
+  if (s < 60)    return 'agora';
+  if (s < 3600)  return Math.floor(s/60)+'m';
+  if (s < 86400) return Math.floor(s/3600)+'h';
+  return Math.floor(s/86400)+'d';
+}
+function ago2(ds) {
+  if (!ds) return '';
+  const s = (Date.now() - new Date(ds))/1e3;
+  if (!s || isNaN(s) || s < 0) return '';
+  if (s < 60)    return 'agora';
+  if (s < 3600)  return Math.floor(s/60)+'m';
+  if (s < 86400) return Math.floor(s/3600)+'h';
+  return Math.floor(s/86400)+'d';
+}
+function loading(id)  { document.getElementById(id).innerHTML = '<div class="loading"><div class="spinner"></div> Carregando…</div>'; }
+
+
+// ════════════════════════════════════════
+// CLOCK
+// ════════════════════════════════════════
+const DAYS  = ['Domingo','Segunda','Terça','Quarta','Quinta','Sexta','Sábado'];
+const MONTHS= ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
+function tick() {
+  const n = new Date();
+  document.getElementById('clk-t').textContent =
+    n.toLocaleTimeString('pt-PT',{hour:'2-digit',minute:'2-digit',second:'2-digit'});
+  document.getElementById('clk-d').textContent =
+    `${DAYS[n.getDay()]}, ${n.getDate()} ${MONTHS[n.getMonth()]} ${n.getFullYear()}`;
+}
+setInterval(tick,1000); tick();
+
+
+// ════════════════════════════════════════
+// WEATHER  — Open-Meteo (free, no key)
+// ════════════════════════════════════════
+const WMO = {
+  0:['☀️','Céu limpo'],1:['🌤️','Principalmente limpo'],2:['⛅','Parcialmente nublado'],
+  3:['☁️','Nublado'],45:['🌫️','Nevoeiro'],48:['🌫️','Nevoeiro gelado'],
+  51:['🌦️','Chuvisco leve'],53:['🌦️','Chuvisco moderado'],55:['🌧️','Chuvisco intenso'],
+  61:['🌧️','Chuva leve'],63:['🌧️','Chuva moderada'],65:['🌧️','Chuva intensa'],
+  71:['🌨️','Neve leve'],73:['❄️','Neve moderada'],75:['❄️','Neve intensa'],
+  77:['🌨️','Grãos de neve'],80:['🌦️','Aguaceiros leves'],81:['🌧️','Aguaceiros moderados'],
+  82:['⛈️','Aguaceiros fortes'],95:['⛈️','Trovoada'],96:['⛈️','Trovoada c/ granizo'],
+  99:['🌩️','Trovoada forte c/ granizo'],
+};
+function wmo(c)  { return WMO[c] || ['🌡️','Desconhecido']; }
+const UV_CAT = [[3,'Baixo','#4ade80'],[6,'Moderado','#facc15'],[8,'Alto','#f97316'],[11,'Muito Alto','#ef4444'],[99,'Extremo','#7c3aed']];
+function uvCat(v){ return UV_CAT.find(r => v < r[0]) || UV_CAT[4]; }
+const WDIRS = ['N','NE','E','SE','S','SO','O','NO'];
+function wdir(d) { return WDIRS[Math.round(d/45)%8]; }
+function fcDay(iso,i){
+  if (i===0) return 'Hoje';
+  if (i===1) return 'Amanhã';
+  return DAYS[new Date(iso).getDay()].slice(0,3);
+}
+
+async function loadWx() {
+  loading('wx');
+  const lat=38.7169, lon=-9.1399;
+  const url=`https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}`
+    +`&current=temperature_2m,apparent_temperature,relative_humidity_2m,`
+    +`precipitation,weather_code,wind_speed_10m,wind_direction_10m,`
+    +`uv_index,cloud_cover,surface_pressure,visibility,is_day`
+    +`&daily=weather_code,temperature_2m_max,temperature_2m_min,`
+    +`precipitation_probability_max,precipitation_sum,wind_speed_10m_max,uv_index_max`
+    +`&wind_speed_unit=kmh&timezone=Europe%2FLisbon&forecast_days=7`;
+  try {
+    const { current: c, daily: dy } = await fetch(url).then(r=>r.json());
+    const [ico,desc] = wmo(c.weather_code);
+    const nightIco   = (c.is_day===0 && c.weather_code===0) ? '🌙' : ico;
+    const [,uvLbl,uvClr] = uvCat(c.uv_index);
+
+    let fcRows='';
+    for(let i=0;i<7;i++){
+      const [fi]=wmo(dy.weather_code[i]);
+      const prob=dy.precipitation_probability_max[i]??0;
+      fcRows+=`
+        <div class="fc-row">
+          <span class="fc-day">${fcDay(dy.time[i],i)}</span>
+          <span class="fc-ico">${fi}</span>
+          <div class="fc-bar">
+            <div class="fc-prob">${prob}% chuva</div>
+            <div class="p-track"><div class="p-fill" style="width:${prob}%"></div></div>
+          </div>
+          <div class="fc-temps">
+            <span class="fc-hi">${Math.round(dy.temperature_2m_max[i])}°</span>
+            <span class="fc-lo">${Math.round(dy.temperature_2m_min[i])}°</span>
+          </div>
+        </div>`;
+    }
+
+    document.getElementById('wx').innerHTML=`
+      <div class="wx-hero">
+        <div class="wx-ico">${nightIco}</div>
+        <div class="wx-temp">${Math.round(c.temperature_2m)}<sup>°C</sup></div>
+        <div class="wx-desc">${desc}</div>
+        <div class="wx-loc">📍 Lisboa, Portugal</div>
+        <div class="wx-feels">Sensação: ${Math.round(c.apparent_temperature)}°C</div>
+      </div>
+      <div class="wx-grid">
+        <div class="wx-stat">
+          <span class="wx-stat-lbl">Humidade</span>
+          <span class="wx-stat-val">${c.relative_humidity_2m}<small>%</small></span>
+        </div>
+        <div class="wx-stat">
+          <span class="wx-stat-lbl">Vento</span>
+          <span class="wx-stat-val">${Math.round(c.wind_speed_10m)}<small> km/h</small></span>
+          <span class="wx-stat-sub">${wdir(c.wind_direction_10m)}</span>
+        </div>
+        <div class="wx-stat">
+          <span class="wx-stat-lbl">Índice UV</span>
+          <span class="wx-stat-val" style="color:${uvClr}">${Math.round(c.uv_index)}</span>
+          <span class="wx-stat-sub" style="color:${uvClr}">${uvLbl}</span>
+        </div>
+        <div class="wx-stat">
+          <span class="wx-stat-lbl">Pressão</span>
+          <span class="wx-stat-val">${Math.round(c.surface_pressure)}<small> hPa</small></span>
+        </div>
+        <div class="wx-stat">
+          <span class="wx-stat-lbl">Precipitação</span>
+          <span class="wx-stat-val">${c.precipitation}<small> mm</small></span>
+        </div>
+        <div class="wx-stat">
+          <span class="wx-stat-lbl">Nebulosidade</span>
+          <span class="wx-stat-val">${c.cloud_cover}<small>%</small></span>
+        </div>
+        <div class="wx-stat">
+          <span class="wx-stat-lbl">Visibilidade</span>
+          <span class="wx-stat-val">${Math.round((c.visibility||0)/1000)}<small> km</small></span>
+        </div>
+        <div class="wx-stat">
+          <span class="wx-stat-lbl">Vento máx. hoje</span>
+          <span class="wx-stat-val">${Math.round(dy.wind_speed_10m_max[0])}<small> km/h</small></span>
+        </div>
+      </div>
+      <div class="wx-fc">
+        <div class="wx-fc-hd">Previsão 7 dias</div>
+        ${fcRows}
+      </div>`;
+  } catch(e) {
+    document.getElementById('wx').innerHTML=
+      `<div class="loading err">❌ Erro ao carregar meteorologia<br><small>${esc(e.message)}</small></div>`;
+  }
+}
+
+
+// ════════════════════════════════════════
+// HACKER NEWS  — official API, no key
+// ════════════════════════════════════════
+let hnTab='top';
+const HN_EP={
+  top:'https://hacker-news.firebaseio.com/v0/topstories.json',
+  new:'https://hacker-news.firebaseio.com/v0/newstories.json',
+  ask:'https://hacker-news.firebaseio.com/v0/askstories.json',
+  show:'https://hacker-news.firebaseio.com/v0/showstories.json',
+};
+function domain(url){
+  if(!url) return 'news.ycombinator.com';
+  try{return new URL(url).hostname.replace(/^www\./,'');}catch{return '';}
+}
+
+async function loadHN(type) {
+  hnTab=type||hnTab;
+  loading('hn');
+  try {
+    const ids  = await fetch(HN_EP[hnTab]).then(r=>r.json());
+    const items = await Promise.all(
+      ids.slice(0,25).map(id=>fetch(`https://hacker-news.firebaseio.com/v0/item/${id}.json`).then(r=>r.json()))
+    );
+    const rows = items.filter(Boolean).map((s,i)=>{
+      const link = s.url||`https://news.ycombinator.com/item?id=${s.id}`;
+      return `
+        <a class="ni" href="${esc(link)}" target="_blank" rel="noopener noreferrer">
+          <div class="ni-title">${i+1}. ${esc(s.title)}</div>
+          <div class="ni-meta">
+            <span class="ni-src">${esc(domain(s.url))}</span>
+            <span>▲ ${s.score||0}</span>
+            <span>💬 ${s.descendants||0}</span>
+            <span>${ago(s.time)}</span>
+          </div>
+        </a>`;
+    }).join('');
+    document.getElementById('hn').innerHTML=`<div class="nl">${rows}</div>`;
+    document.getElementById('hn-upd').textContent=
+      'Atualizado '+new Date().toLocaleTimeString('pt-PT',{hour:'2-digit',minute:'2-digit'});
+  } catch(e) {
+    document.getElementById('hn').innerHTML=
+      `<div class="loading err">❌ Hacker News indisponível<br><small>${esc(e.message)}</small></div>`;
+  }
+}
+
+function setHNTab(type,el) {
+  el.closest('.card').querySelectorAll('.tab').forEach(t=>t.classList.remove('on'));
+  el.classList.add('on');
+  loadHN(type);
+}
+
+
+// ════════════════════════════════════════
+// NEWS via RSS → JSON  (rss2json.com free)
+// ════════════════════════════════════════
+let nTab='world';
+const nStore={world:[],pt:[],tech:[],urgent:[]};
+
+const PROXY='https://api.rss2json.com/v1/api.json?count=25&rss_url=';
+const RFEEDS={
+  world:['https://feeds.bbci.co.uk/news/world/rss.xml','https://rss.nytimes.com/services/xml/rss/nyt/World.xml'],
+  pt:   ['https://feeds.publico.pt/publico/ultimas','https://observador.pt/feed/'],
+  tech: ['https://feeds.arstechnica.com/arstechnica/index','https://www.theverge.com/rss/index.xml'],
+};
+const URG_KW=['breaking','urgent','alert','attack','killed','dead','dies','earthquake',
+  'explosion','crash','disaster','emergency','crisis','war','missile',
+  'urgente','alerta','ataque','morto','mortos','sismo','explosão','acidente','terrorismo'];
+
+function isUrg(t){ const l=t.toLowerCase(); return URG_KW.some(k=>l.includes(k)); }
+
+async function rss(url) {
+  try{
+    const d=await fetch(PROXY+encodeURIComponent(url)).then(r=>r.json());
+    return Array.isArray(d.items)?d.items:[];
+  }catch{return [];}
+}
+
+async function loadNews() {
+  loading('news');
+  const [w1,w2,p1,p2,t1,t2]=await Promise.all([
+    rss(RFEEDS.world[0]),rss(RFEEDS.world[1]),
+    rss(RFEEDS.pt[0]),  rss(RFEEDS.pt[1]),
+    rss(RFEEDS.tech[0]),rss(RFEEDS.tech[1]),
+  ]);
+  const map=(items,src)=>items.slice(0,20).map(x=>({
+    title:x.title||'',link:x.link||x.guid||'#',
+    source:src,date:x.pubDate||'',urgent:isUrg(x.title||''),
+  }));
+  nStore.world =[...map(w1,'BBC World'),...map(w2,'NYT World')].slice(0,30);
+  nStore.pt    =[...map(p1,'Público'), ...map(p2,'Observador')].slice(0,30);
+  nStore.tech  =[...map(t1,'Ars Technica'),...map(t2,'The Verge')].slice(0,30);
+  nStore.urgent=[...nStore.world,...nStore.pt,...nStore.tech]
+    .filter(n=>n.urgent)
+    .sort((a,b)=>new Date(b.date)-new Date(a.date));
+  renderNews(nTab);
+  document.getElementById('news-upd').textContent=
+    'Atualizado '+new Date().toLocaleTimeString('pt-PT',{hour:'2-digit',minute:'2-digit'});
+}
+
+function renderNews(tab) {
+  const el=document.getElementById('news');
+  const list=nStore[tab]||[];
+  if(!list.length){
+    el.innerHTML=tab==='urgent'
+      ?'<div class="loading" style="color:var(--green)">✅ Sem notícias urgentes</div>'
+      :'<div class="loading err">Sem notícias disponíveis</div>';
+    return;
+  }
+  const rows=list.map(n=>`
+    <a class="ni${n.urgent?' urg':''}" href="${esc(n.link)}" target="_blank" rel="noopener noreferrer">
+      <div class="ni-title">${n.urgent?'🔴 ':''}${esc(n.title)}</div>
+      <div class="ni-meta">
+        <span class="ni-src">${esc(n.source)}</span>
+        ${n.date?`<span>${ago2(n.date)}</span>`:''}
+      </div>
+    </a>`).join('');
+  el.innerHTML=`<div class="nl">${rows}</div>`;
+}
+
+function setNTab(type,el) {
+  el.closest('.card').querySelectorAll('.tab').forEach(t=>t.classList.remove('on'));
+  el.classList.add('on');
+  nTab=type;
+  if(nStore[type].length||type==='urgent') renderNews(type);
+  else loading('news');
+}
+
+
+// ════════════════════════════════════════
+// BOOT + auto-refresh every 5 min
+// ════════════════════════════════════════
+loadWx();
+loadHN('top');
+loadNews();
+setInterval(()=>{ loadWx(); loadHN(hnTab); loadNews(); }, 5*60*1000);
+</script>
 </body>
+</html>
