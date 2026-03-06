@@ -196,7 +196,7 @@
     <!-- WEATHER -->
     <div class="card wx-card">
       <div class="card-head">
-        <div class="card-title"><span class="ico">🌤</span> Meteorologia — Lisboa</div>
+        <div class="card-title"><span class="ico">🌤</span> Meteorologia — <span id="wx-city">Localizando…</span></div>
         <div class="card-acts">
           <span class="badge-live">● AO VIVO</span>
           <button class="refresh" onclick="loadWx()">↻</button>
@@ -319,7 +319,28 @@ function fcDay(iso,i){
 
 async function loadWx() {
   loading('wx');
-  const lat=38.7169, lon=-9.1399;
+  let lat=38.7169, lon=-9.1399, cityLabel='Lisboa, Portugal';
+
+  try {
+    const pos = await new Promise((res,rej) =>
+      navigator.geolocation.getCurrentPosition(res, rej, {timeout:6000})
+    );
+    lat = pos.coords.latitude;
+    lon = pos.coords.longitude;
+    try {
+      const geo = await fetch(
+        `https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lon}&format=json`
+      ).then(r=>r.json());
+      const a = geo.address || {};
+      const city = a.city || a.town || a.village || a.county || '';
+      const country = a.country || '';
+      if (city) cityLabel = country ? `${city}, ${country}` : city;
+      else if (geo.display_name) cityLabel = geo.display_name.split(',')[0];
+    } catch {}
+  } catch {}
+
+  document.getElementById('wx-city').textContent = cityLabel;
+
   const url=`https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}`
     +`&current=temperature_2m,apparent_temperature,relative_humidity_2m,`
     +`precipitation,weather_code,wind_speed_10m,wind_direction_10m,`
@@ -357,7 +378,7 @@ async function loadWx() {
         <div class="wx-ico">${nightIco}</div>
         <div class="wx-temp">${Math.round(c.temperature_2m)}<sup>°C</sup></div>
         <div class="wx-desc">${desc}</div>
-        <div class="wx-loc">📍 Lisboa, Portugal</div>
+        <div class="wx-loc">📍 ${esc(cityLabel)}</div>
         <div class="wx-feels">Sensação: ${Math.round(c.apparent_temperature)}°C</div>
       </div>
       <div class="wx-grid">
@@ -460,12 +481,11 @@ function setHNTab(type,el) {
 
 
 // ════════════════════════════════════════
-// NEWS via RSS → JSON  (rss2json.com free)
+// NEWS via RSS → allorigins proxy + XML parse
 // ════════════════════════════════════════
 let nTab='world';
 const nStore={world:[],pt:[],tech:[],urgent:[]};
 
-const PROXY='https://api.rss2json.com/v1/api.json?count=25&rss_url=';
 const RFEEDS={
   world:['https://feeds.bbci.co.uk/news/world/rss.xml','https://rss.nytimes.com/services/xml/rss/nyt/World.xml'],
   pt:   ['https://feeds.publico.pt/publico/ultimas','https://observador.pt/feed/'],
@@ -477,11 +497,21 @@ const URG_KW=['breaking','urgent','alert','attack','killed','dead','dies','earth
 
 function isUrg(t){ const l=t.toLowerCase(); return URG_KW.some(k=>l.includes(k)); }
 
+function parseRssXml(xml) {
+  const doc = new DOMParser().parseFromString(xml, 'text/xml');
+  return Array.from(doc.querySelectorAll('item')).map(item => {
+    const txt = s => item.querySelector(s)?.textContent?.trim() || '';
+    const link = txt('link') || txt('guid') || '#';
+    return { title: txt('title'), link, pubDate: txt('pubDate') };
+  });
+}
+
 async function rss(url) {
-  try{
-    const d=await fetch(PROXY+encodeURIComponent(url)).then(r=>r.json());
-    return Array.isArray(d.items)?d.items:[];
-  }catch{return [];}
+  try {
+    const proxy = `https://api.allorigins.win/get?url=${encodeURIComponent(url)}`;
+    const d = await fetch(proxy).then(r => r.json());
+    return parseRssXml(d.contents || '');
+  } catch { return []; }
 }
 
 async function loadNews() {
